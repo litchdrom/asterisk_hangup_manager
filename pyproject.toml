@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asterisk-hangup-manager"
+version = "0.1.0"
+description = "Detect Asterisk hangups via AMI (Panoramisk) and email contacts from a MySQL table"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "panoramisk==1.4",
+    "aiomysql==0.3.2",
+    "aiosmtplib==5.1.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+asterisk-hangup-manager = "asterisk_hangup_manager.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["asterisk_hangup_manager*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

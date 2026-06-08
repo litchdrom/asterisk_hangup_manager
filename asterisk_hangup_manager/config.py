@@ -1,0 +1,132 @@
+"""Configuration loading for the Asterisk hangup manager.
+
+Configuration is read from environment variables so that secrets (AMI
+password, MySQL password, SMTP password) are never stored in the source
+tree. See ``config.example.env`` for the full list of supported variables.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+class ConfigError(ValueError):
+    """Raised when the configuration is missing or invalid."""
+
+
+def _get(name: str, default: str | None = None, *, required: bool = False) -> str:
+    value = os.environ.get(name, default)
+    if required and (value is None or value == ""):
+        raise ConfigError(f"Missing required environment variable: {name}")
+    return value if value is not None else ""
+
+
+def _get_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"Environment variable {name} must be an integer") from exc
+
+
+def _get_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass(frozen=True)
+class AMIConfig:
+    """Asterisk Manager Interface connection settings."""
+
+    host: str = "127.0.0.1"
+    port: int = 5038
+    username: str = ""
+    secret: str = ""
+    # Name of the AMI Hangup event field used as the lookup key (``dst``).
+    dst_field: str = "Exten"
+
+
+@dataclass(frozen=True)
+class MySQLConfig:
+    """MySQL connection settings and table/column mapping."""
+
+    host: str = "127.0.0.1"
+    port: int = 3306
+    user: str = ""
+    password: str = ""
+    database: str = ""
+    table: str = "hangup_contacts"
+    dst_column: str = "dst"
+    email_column: str = "email"
+    description_column: str = "description"
+
+
+@dataclass(frozen=True)
+class SMTPConfig:
+    """SMTP settings used to send notification emails."""
+
+    host: str = "127.0.0.1"
+    port: int = 25
+    username: str = ""
+    password: str = ""
+    use_tls: bool = False
+    start_tls: bool = False
+    sender: str = "asterisk@localhost"
+    subject_template: str = "Hangup detected on {dst}"
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    """Top-level application configuration."""
+
+    ami: AMIConfig
+    mysql: MySQLConfig
+    smtp: SMTPConfig
+    log_level: str = "INFO"
+
+
+def load_config() -> AppConfig:
+    """Build an :class:`AppConfig` from the current environment."""
+
+    ami = AMIConfig(
+        host=_get("AMI_HOST", "127.0.0.1"),
+        port=_get_int("AMI_PORT", 5038),
+        username=_get("AMI_USERNAME", required=True),
+        secret=_get("AMI_SECRET", required=True),
+        dst_field=_get("AMI_DST_FIELD", "Exten"),
+    )
+
+    mysql = MySQLConfig(
+        host=_get("MYSQL_HOST", "127.0.0.1"),
+        port=_get_int("MYSQL_PORT", 3306),
+        user=_get("MYSQL_USER", required=True),
+        **{"password": _get("MYSQL_PASSWORD", "")},
+        database=_get("MYSQL_DATABASE", required=True),
+        table=_get("MYSQL_TABLE", "hangup_contacts"),
+        dst_column=_get("MYSQL_DST_COLUMN", "dst"),
+        email_column=_get("MYSQL_EMAIL_COLUMN", "email"),
+        description_column=_get("MYSQL_DESCRIPTION_COLUMN", "description"),
+    )
+
+    smtp = SMTPConfig(
+        host=_get("SMTP_HOST", "127.0.0.1"),
+        port=_get_int("SMTP_PORT", 25),
+        username=_get("SMTP_USERNAME", ""),
+        **{"password": _get("SMTP_PASSWORD", "")},
+        use_tls=_get_bool("SMTP_USE_TLS", False),
+        start_tls=_get_bool("SMTP_START_TLS", False),
+        sender=_get("SMTP_SENDER", "asterisk@localhost"),
+        subject_template=_get("SMTP_SUBJECT_TEMPLATE", "Hangup detected on {dst}"),
+    )
+
+    return AppConfig(
+        ami=ami,
+        mysql=mysql,
+        smtp=smtp,
+        log_level=_get("LOG_LEVEL", "INFO"),
+    )

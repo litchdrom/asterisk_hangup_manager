@@ -1,0 +1,3 @@
+panoramisk==1.4
+aiomysql==0.3.2
+aiosmtplib==5.1.1
