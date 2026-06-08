@@ -15,15 +15,19 @@ class ConfigError(ValueError):
     """Raised when the configuration is missing or invalid."""
 
 
-def load_env_file(path: str | None = None) -> None:
+def load_env_file(path: str | None = None, *, override: bool = True) -> None:
     """Populate ``os.environ`` from a ``.env`` file if one is present.
 
     Lines are ``KEY=VALUE`` pairs; blank lines and ``#`` comments are
     ignored, an optional leading ``export`` is allowed and surrounding
-    single or double quotes are stripped. Variables already present in the
-    environment are **not** overwritten, so values provided by the shell or
-    by systemd's ``EnvironmentFile=`` always take precedence. A missing file
-    is silently ignored.
+    single or double quotes are stripped. A missing file is silently
+    ignored.
+
+    By default (``override=True``) values from the file replace any
+    variables already present in the environment, so editing ``.env`` always
+    takes effect even if a stale value was left exported in the shell (for
+    example from a previous ``set -a; source config.example.env``). Pass
+    ``override=False`` to keep pre-existing environment variables instead.
 
     The path defaults to ``$ENV_FILE`` when set, otherwise ``.env`` in the
     current working directory.
@@ -51,7 +55,8 @@ def load_env_file(path: str | None = None) -> None:
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
             value = value[1:-1]
-        os.environ.setdefault(key, value)
+        if override or key not in os.environ:
+            os.environ[key] = value
 
 
 def _get(name: str, default: str | None = None, *, required: bool = False) -> str:
@@ -144,8 +149,10 @@ class AppConfig:
 def load_config() -> AppConfig:
     """Build an :class:`AppConfig` from the current environment.
 
-    A ``.env`` file (see :func:`load_env_file`) is loaded first when present,
-    so the service can run without sourcing it into the shell beforehand.
+    A ``.env`` file (see :func:`load_env_file`) is loaded first when present
+    and its values override the existing environment, so the service can run
+    without sourcing it into the shell beforehand and edits to ``.env`` always
+    take effect.
     """
 
     load_env_file()
