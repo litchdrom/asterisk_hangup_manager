@@ -34,6 +34,35 @@ def test_load_config_defaults(monkeypatch):
     assert config.smtp.subject_template == "Missed call to {dst}"
     assert config.smtp.fallback_email == ""
     assert config.smtp.body_template == ""
+    # CDR detection defaults.
+    assert config.ami.detection_mode == "hangup"
+    assert config.ami.cdr_event == "Cdr"
+    assert config.ami.cdr_dst_field == "Destination"
+    assert config.ami.cdr_lastapp_field == "LastApplication"
+    assert config.ami.cdr_linkedid_field == "UniqueID"
+    assert config.ami.cdr_apps == "Dial,Queue"
+    # CDR DB connection defaults to the contact MySQL settings.
+    assert config.cdr.table == "cdr"
+    assert config.cdr.user == config.mysql.user
+    assert config.cdr.database == config.mysql.database
+    assert config.cdr.disposition_column == "disposition"
+    assert config.cdr.dstchannel_column == "dstchannel"
+    assert config.cdr.answered_value == "ANSWERED"
+
+
+def test_load_config_cdr_overrides(monkeypatch):
+    _set_required(monkeypatch)
+    monkeypatch.setenv("AMI_DETECTION_MODE", "cdr")
+    monkeypatch.setenv("CDR_MYSQL_DATABASE", "asteriskcdrdb")
+    monkeypatch.setenv("CDR_TABLE", "cdr_records")
+    monkeypatch.setenv("CDR_ANSWERED_VALUE", "ANSWER")
+
+    config = load_config()
+
+    assert config.ami.detection_mode == "cdr"
+    assert config.cdr.database == "asteriskcdrdb"
+    assert config.cdr.table == "cdr_records"
+    assert config.cdr.answered_value == "ANSWER"
 
 
 def test_load_config_overrides(monkeypatch):

@@ -5,17 +5,32 @@ A small asyncio service that listens to Asterisk Manager Interface (AMI)
 (``dst``, ``email``, ``description``) and sends a notification email.
 """
 
-from .config import AppConfig, AMIConfig, MySQLConfig, SMTPConfig, load_config
-from .database import HangupContact, HangupContactRepository
+from .config import (
+    AppConfig,
+    AMIConfig,
+    CdrConfig,
+    MySQLConfig,
+    SMTPConfig,
+    load_config,
+)
+from .database import (
+    CdrRepository,
+    CdrSummary,
+    HangupContact,
+    HangupContactRepository,
+)
 from .mailer import EmailSender
 from .service import HangupManager
 
 __all__ = [
     "AppConfig",
     "AMIConfig",
+    "CdrConfig",
     "MySQLConfig",
     "SMTPConfig",
     "load_config",
+    "CdrRepository",
+    "CdrSummary",
     "HangupContact",
     "HangupContactRepository",
     "EmailSender",

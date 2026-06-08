@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import aiomysql
 
-from .config import MySQLConfig
+from .config import CdrConfig, MySQLConfig
 
 # Identifiers (table/column names) come from configuration, not from event
 # data, but we still validate them so a typo cannot produce a malformed or
@@ -97,6 +97,102 @@ class HangupContactRepository:
         )
 
     async def __aenter__(self) -> "HangupContactRepository":
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *_exc_info: object) -> None:
+        await self.close()
+
+
+@dataclass(frozen=True)
+class CdrSummary:
+    """Aggregated CDR information for a single call (one ``linkedid``)."""
+
+    total: int
+    answered: int
+
+    @property
+    def has_record(self) -> bool:
+        """Whether any CDR row exists for the call."""
+
+        return self.total > 0
+
+    @property
+    def is_answered(self) -> bool:
+        """Whether a destination/agent channel answered the call."""
+
+        return self.answered > 0
+
+
+class CdrRepository:
+    """Query the Asterisk CDR table to decide whether a call was answered."""
+
+    def __init__(self, config: CdrConfig) -> None:
+        self._config = config
+        self._pool: aiomysql.Pool | None = None
+        self._query = self._build_query(config)
+
+    @staticmethod
+    def _build_query(config: CdrConfig) -> str:
+        table = _safe_identifier(config.table)
+        linkedid = _safe_identifier(config.linkedid_column)
+        disposition = _safe_identifier(config.disposition_column)
+        dstchannel = _safe_identifier(config.dstchannel_column)
+        # Count every leg of the call, and separately the legs that reached an
+        # answered destination channel. A non-empty destination channel is what
+        # tells a real agent/dial leg apart from the originating channel's own
+        # record, so an IVR answering the caller is not mistaken for the call
+        # being answered.
+        return (
+            f"SELECT COUNT(*) AS total, "
+            f"SUM({disposition} = %s AND {dstchannel} <> '') AS answered "
+            f"FROM {table} WHERE {linkedid} = %s"
+        )
+
+    async def connect(self) -> None:
+        """Create the underlying connection pool."""
+
+        if self._pool is not None:
+            return
+        self._pool = await aiomysql.create_pool(
+            host=self._config.host,
+            port=self._config.port,
+            user=self._config.user,
+            **{"password": self._config.password},
+            db=self._config.database,
+            autocommit=True,
+        )
+
+    async def close(self) -> None:
+        """Close the connection pool and wait for it to drain."""
+
+        if self._pool is None:
+            return
+        self._pool.close()
+        await self._pool.wait_closed()
+        self._pool = None
+
+    async def summarize(self, linkedid: str) -> CdrSummary:
+        """Return the CDR summary for the call identified by ``linkedid``."""
+
+        if self._pool is None:
+            raise RuntimeError("Repository is not connected; call connect() first")
+
+        async with self._pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute(
+                    self._query, (self._config.answered_value, linkedid)
+                )
+                row = await cursor.fetchone()
+
+        if not row:
+            return CdrSummary(total=0, answered=0)
+        return CdrSummary(
+            total=int(row["total"] or 0),
+            answered=int(row["answered"] or 0),
+        )
+
+    async def __aenter__(self) -> "CdrRepository":
         await self.connect()
         return self
 
