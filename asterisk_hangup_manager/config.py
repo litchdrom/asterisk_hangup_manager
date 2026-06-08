@@ -49,6 +49,11 @@ class AMIConfig:
     secret: str = ""
     # Name of the AMI Hangup event field used as the lookup key (``dst``).
     dst_field: str = "Exten"
+    # AMI event that signals a dial/queue attempt created an outgoing channel.
+    # While this event is seen for a call, the call is considered connected
+    # (not missed). Asterisk emits ``DialBegin`` for both ``Dial()`` and queue
+    # member attempts.
+    dial_event: str = "DialBegin"
 
 
 @dataclass(frozen=True)
@@ -77,7 +82,14 @@ class SMTPConfig:
     use_tls: bool = False
     start_tls: bool = False
     sender: str = "asterisk@localhost"
-    subject_template: str = "Hangup detected on {dst}"
+    subject_template: str = "Missed call to {dst}"
+    # Predefined body for the missed-call notification. When empty a built-in
+    # body is composed from the contact and call details. Supports the
+    # ``{dst}``, ``{description}``, ``{channel}``, ``{caller_id}`` and
+    # ``{cause}`` placeholders.
+    body_template: str = ""
+    # Recipient used when the matched contact has no email address of its own.
+    fallback_email: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,6 +111,7 @@ def load_config() -> AppConfig:
         username=_get("AMI_USERNAME", required=True),
         secret=_get("AMI_SECRET", required=True),
         dst_field=_get("AMI_DST_FIELD", "Exten"),
+        dial_event=_get("AMI_DIAL_EVENT", "DialBegin"),
     )
 
     mysql = MySQLConfig(
@@ -121,7 +134,9 @@ def load_config() -> AppConfig:
         use_tls=_get_bool("SMTP_USE_TLS", False),
         start_tls=_get_bool("SMTP_START_TLS", False),
         sender=_get("SMTP_SENDER", "asterisk@localhost"),
-        subject_template=_get("SMTP_SUBJECT_TEMPLATE", "Hangup detected on {dst}"),
+        subject_template=_get("SMTP_SUBJECT_TEMPLATE", "Missed call to {dst}"),
+        body_template=_get("SMTP_BODY_TEMPLATE", ""),
+        fallback_email=_get("SMTP_FALLBACK_EMAIL", ""),
     )
 
     return AppConfig(
