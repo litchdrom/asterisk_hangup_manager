@@ -457,3 +457,40 @@ def test_run_cdr_mode_registers_cdr_event():
 
     assert fake.registered == ["Cdr"]
     assert cdr.connected is True
+
+
+def test_on_hangup_swallows_handler_exceptions():
+    mailer = FakeMailer()
+    manager = _manager({}, mailer)
+
+    async def _boom(_event):
+        raise RuntimeError("boom")
+
+    manager.handle_hangup = _boom
+
+    # The wrapper must not propagate; panoramisk schedules this coroutine
+    # with ensure_future and never retrieves its result, so an escaping
+    # exception would surface as "Task exception was never retrieved".
+    asyncio.run(manager._on_hangup(None, {"Exten": "1001"}))
+
+
+def test_on_dial_swallows_handler_exceptions():
+    manager = _manager({}, FakeMailer())
+
+    async def _boom(_event):
+        raise RuntimeError("boom")
+
+    manager.handle_dial = _boom
+
+    asyncio.run(manager._on_dial(None, {"Linkedid": "1"}))
+
+
+def test_on_cdr_swallows_handler_exceptions():
+    manager = _manager({}, FakeMailer())
+
+    async def _boom(_event):
+        raise RuntimeError("boom")
+
+    manager.handle_cdr = _boom
+
+    asyncio.run(manager._on_cdr(None, {"Cdr": "x"}))

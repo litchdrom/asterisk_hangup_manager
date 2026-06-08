@@ -329,13 +329,22 @@ class HangupManager:
             self._notified_calls.discard(oldest)
 
     async def _on_hangup(self, _manager: Manager, message: Mapping[str, Any]) -> None:
-        await self.handle_hangup(message)
+        try:
+            await self.handle_hangup(message)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Unhandled error while processing Hangup event")
 
     async def _on_dial(self, _manager: Manager, message: Mapping[str, Any]) -> None:
-        await self.handle_dial(message)
+        try:
+            await self.handle_dial(message)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Unhandled error while processing dial event")
 
     async def _on_cdr(self, _manager: Manager, message: Mapping[str, Any]) -> None:
-        await self.handle_cdr(message)
+        try:
+            await self.handle_cdr(message)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Unhandled error while processing Cdr event")
 
     async def run(self) -> None:
         """Connect to AMI and process call events until cancelled."""
