@@ -30,6 +30,7 @@ def test_load_config_defaults(monkeypatch):
     assert config.mysql.table == "hangup_contacts"
     assert config.smtp.port == 25
     assert config.smtp.use_tls is False
+    assert config.smtp.validate_certs is True
     assert config.ami.dial_event == "DialBegin,AgentCalled"
     assert config.smtp.subject_template == "Missed call to {dst}"
     assert config.smtp.fallback_email == ""
@@ -76,6 +77,15 @@ def test_load_config_overrides(monkeypatch):
     assert config.ami.port == 5040
     assert config.ami.dst_field == "CallerIDNum"
     assert config.smtp.use_tls is True
+
+
+def test_load_config_validate_certs_disabled(monkeypatch):
+    _set_required(monkeypatch)
+    monkeypatch.setenv("SMTP_VALIDATE_CERTS", "false")
+
+    config = load_config()
+
+    assert config.smtp.validate_certs is False
 
 
 def test_load_config_missing_required(monkeypatch):

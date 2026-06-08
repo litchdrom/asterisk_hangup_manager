@@ -134,6 +134,7 @@ When running under systemd, the provided unit loads the same file via
 | `SMTP_HOST` / `SMTP_PORT` | `127.0.0.1` / `25` | SMTP address |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | empty | SMTP auth (optional) |
 | `SMTP_USE_TLS` / `SMTP_START_TLS` | `false` | TLS / STARTTLS |
+| `SMTP_VALIDATE_CERTS` | `true` | Set to `false` to skip TLS certificate verification (trusted/self-signed environments only) |
 | `SMTP_SENDER` | `asterisk@localhost` | From address |
 | `SMTP_SUBJECT_TEMPLATE` | `Missed call to {dst}` | Supports `{dst}`, `{description}`, `{channel}`, `{caller_id}`, `{cause}`, `{start_time}`, `{duration}` |
 | `SMTP_BODY_TEMPLATE` | — (built-in body) | Optional body; supports `{dst}`, `{description}`, `{channel}`, `{caller_id}`, `{cause}`, `{start_time}`, `{duration}` |
