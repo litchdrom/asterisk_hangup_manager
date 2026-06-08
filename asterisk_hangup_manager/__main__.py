@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 from .config import AppConfig, ConfigError, load_config
-from .database import HangupContactRepository
+from .database import CdrRepository, HangupContactRepository
 from .mailer import EmailSender
 from .service import HangupManager
 
@@ -16,7 +16,14 @@ logger = logging.getLogger("asterisk_hangup_manager")
 async def _run(config: AppConfig) -> None:
     repository = HangupContactRepository(config.mysql)
     mailer = EmailSender(config.smtp)
-    service = HangupManager(config, repository, mailer)
+    cdr_repository = (
+        CdrRepository(config.cdr)
+        if config.ami.detection_mode.strip().lower() == "cdr"
+        else None
+    )
+    service = HangupManager(
+        config, repository, mailer, cdr_repository=cdr_repository
+    )
     await service.run()
 
 

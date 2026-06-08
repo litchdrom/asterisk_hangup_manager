@@ -91,13 +91,45 @@ class AMIConfig:
     port: int = 5038
     username: str = ""
     secret: str = ""
-    # Name of the AMI Hangup event field used as the lookup key (``dst``).
-    dst_field: str = "Exten"
-    # AMI event that signals a dial/queue attempt created an outgoing channel.
-    # While this event is seen for a call, the call is considered connected
-    # (not missed). Asterisk emits ``DialBegin`` for both ``Dial()`` and queue
-    # member attempts.
-    dial_event: str = "DialBegin"
+    # Name of the AMI Hangup event field(s) used as the lookup key (``dst``).
+    # May be a single field or a comma-separated list tried in order until one
+    # yields a usable value. ``Exten`` is preferred but does not always carry
+    # the dialled DID (it is the special ``h`` hangup-handler extension when
+    # the call traversed one), so ``ConnectedLineNum`` is used as a fallback.
+    dst_field: str = "Exten,ConnectedLineNum"
+    # AMI event(s) that signal a dial/queue attempt created an outgoing
+    # channel. May be a single event or a comma-separated list. While any of
+    # these events is seen for a call, the call is considered connected (not
+    # missed). Asterisk emits ``DialBegin`` for ``Dial()`` but queue member
+    # attempts are reported via ``AgentCalled`` instead, so both are watched
+    # by default. Only used when :attr:`detection_mode` is ``hangup``.
+    dial_event: str = "DialBegin,AgentCalled"
+    # How missed calls are detected:
+    #   ``hangup`` - track dial/queue events and the originating hangup
+    #               (in-memory, no CDR database required).
+    #   ``cdr``    - react to the AMI ``Cdr`` event (requires ``cdr_manager``)
+    #               and query the CDR table to decide whether any destination
+    #               channel actually answered. This is more reliable when an
+    #               IVR answers the caller before a queue/dial attempt, which
+    #               makes the originating channel's ``Disposition`` ``ANSWERED``
+    #               even though no agent ever picked up.
+    detection_mode: str = "hangup"
+    # AMI event carrying a finalised call detail record (``cdr_manager``).
+    cdr_event: str = "Cdr"
+    # ``Cdr`` event field holding the dialled number used as the ``dst`` key.
+    cdr_dst_field: str = "Destination"
+    # ``Cdr`` event field naming the last dialplan application executed. Only
+    # records whose application is in :attr:`cdr_apps` are considered, so that
+    # calls which never reached a dial/queue attempt are ignored.
+    cdr_lastapp_field: str = "LastApplication"
+    # ``Cdr`` event field tying the record to the call. The originating
+    # channel's unique id equals the call's ``linkedid``; used to query the
+    # CDR table for every leg of the call.
+    cdr_linkedid_field: str = "UniqueID"
+    # Dialplan applications (comma-separated) whose CDR records represent an
+    # attempt to reach a destination/agent. Records ending in other
+    # applications (for example an IVR ``Read``) are ignored.
+    cdr_apps: str = "Dial,Queue"
 
 
 @dataclass(frozen=True)
@@ -116,6 +148,36 @@ class MySQLConfig:
 
 
 @dataclass(frozen=True)
+class CdrConfig:
+    """MySQL connection settings and column mapping for the CDR table.
+
+    Used only when :attr:`AMIConfig.detection_mode` is ``cdr``. The connection
+    parameters default to the contact :class:`MySQLConfig` values so that a
+    single database serving both tables needs no extra configuration; set the
+    ``CDR_MYSQL_*`` variables to point at a separate CDR database (for example
+    Asterisk's ``asteriskcdrdb``).
+    """
+
+    host: str = "127.0.0.1"
+    port: int = 3306
+    user: str = ""
+    password: str = ""
+    database: str = ""
+    table: str = "cdr"
+    # Column tying every leg of a call together (the originating channel's
+    # unique id). Queried to find all CDR rows for one call.
+    linkedid_column: str = "linkedid"
+    # Column holding each leg's disposition (``ANSWERED``, ``NO ANSWER`` ...).
+    disposition_column: str = "disposition"
+    # Column holding the destination channel. A non-empty value distinguishes a
+    # real destination/agent leg from the originating channel's own record, so
+    # an IVR answering the caller does not count as the call being answered.
+    dstchannel_column: str = "dstchannel"
+    # Disposition value that means a leg was answered.
+    answered_value: str = "ANSWERED"
+
+
+@dataclass(frozen=True)
 class SMTPConfig:
     """SMTP settings used to send notification emails."""
 
@@ -129,8 +191,8 @@ class SMTPConfig:
     subject_template: str = "Missed call to {dst}"
     # Predefined body for the missed-call notification. When empty a built-in
     # body is composed from the contact and call details. Supports the
-    # ``{dst}``, ``{description}``, ``{channel}``, ``{caller_id}`` and
-    # ``{cause}`` placeholders.
+    # ``{dst}``, ``{description}``, ``{channel}``, ``{caller_id}``, ``{cause}``,
+    # ``{start_time}`` and ``{duration}`` placeholders.
     body_template: str = ""
     # Recipient used when the matched contact has no email address of its own.
     fallback_email: str = ""
@@ -142,6 +204,7 @@ class AppConfig:
 
     ami: AMIConfig
     mysql: MySQLConfig
+    cdr: CdrConfig
     smtp: SMTPConfig
     log_level: str = "INFO"
 
@@ -162,8 +225,14 @@ def load_config() -> AppConfig:
         port=_get_int("AMI_PORT", 5038),
         username=_get("AMI_USERNAME", required=True),
         secret=_get("AMI_SECRET", required=True),
-        dst_field=_get("AMI_DST_FIELD", "Exten"),
-        dial_event=_get("AMI_DIAL_EVENT", "DialBegin"),
+        dst_field=_get("AMI_DST_FIELD", "Exten,ConnectedLineNum"),
+        dial_event=_get("AMI_DIAL_EVENT", "DialBegin,AgentCalled"),
+        detection_mode=_get("AMI_DETECTION_MODE", "hangup"),
+        cdr_event=_get("AMI_CDR_EVENT", "Cdr"),
+        cdr_dst_field=_get("AMI_CDR_DST_FIELD", "Destination"),
+        cdr_lastapp_field=_get("AMI_CDR_LASTAPP_FIELD", "LastApplication"),
+        cdr_linkedid_field=_get("AMI_CDR_LINKEDID_FIELD", "UniqueID"),
+        cdr_apps=_get("AMI_CDR_APPS", "Dial,Queue"),
     )
 
     mysql = MySQLConfig(
@@ -176,6 +245,19 @@ def load_config() -> AppConfig:
         dst_column=_get("MYSQL_DST_COLUMN", "dst"),
         email_column=_get("MYSQL_EMAIL_COLUMN", "email"),
         description_column=_get("MYSQL_DESCRIPTION_COLUMN", "description"),
+    )
+
+    cdr = CdrConfig(
+        host=_get("CDR_MYSQL_HOST", mysql.host),
+        port=_get_int("CDR_MYSQL_PORT", mysql.port),
+        user=_get("CDR_MYSQL_USER", mysql.user),
+        **{"password": _get("CDR_MYSQL_PASSWORD", mysql.password)},
+        database=_get("CDR_MYSQL_DATABASE", mysql.database),
+        table=_get("CDR_TABLE", "cdr"),
+        linkedid_column=_get("CDR_LINKEDID_COLUMN", "linkedid"),
+        disposition_column=_get("CDR_DISPOSITION_COLUMN", "disposition"),
+        dstchannel_column=_get("CDR_DSTCHANNEL_COLUMN", "dstchannel"),
+        answered_value=_get("CDR_ANSWERED_VALUE", "ANSWERED"),
     )
 
     smtp = SMTPConfig(
@@ -194,6 +276,7 @@ def load_config() -> AppConfig:
     return AppConfig(
         ami=ami,
         mysql=mysql,
+        cdr=cdr,
         smtp=smtp,
         log_level=_get("LOG_LEVEL", "INFO"),
     )
