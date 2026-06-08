@@ -187,6 +187,10 @@ class SMTPConfig:
     password: str = ""
     use_tls: bool = False
     start_tls: bool = False
+    # When ``False`` the TLS certificate presented by the SMTP server is not
+    # verified. Only disable this for trusted/self-signed environments as it
+    # exposes mail delivery to man-in-the-middle attacks.
+    validate_certs: bool = True
     sender: str = "asterisk@localhost"
     # Subject line for the missed-call notification. Supports the same
     # placeholders as ``body_template``: ``{dst}``, ``{description}``,
@@ -271,6 +275,7 @@ def load_config() -> AppConfig:
         **{"password": _get("SMTP_PASSWORD", "")},
         use_tls=_get_bool("SMTP_USE_TLS", False),
         start_tls=_get_bool("SMTP_START_TLS", False),
+        validate_certs=_get_bool("SMTP_VALIDATE_CERTS", True),
         sender=_get("SMTP_SENDER", "asterisk@localhost"),
         subject_template=_get("SMTP_SUBJECT_TEMPLATE", "Missed call to {dst}"),
         body_template=_get("SMTP_BODY_TEMPLATE", ""),

@@ -37,4 +37,5 @@ class EmailSender:
             **{"password": self._config.password or None},
             use_tls=self._config.use_tls,
             start_tls=self._config.start_tls,
+            validate_certs=self._config.validate_certs,
         )
