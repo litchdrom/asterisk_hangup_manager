@@ -91,13 +91,19 @@ class AMIConfig:
     port: int = 5038
     username: str = ""
     secret: str = ""
-    # Name of the AMI Hangup event field used as the lookup key (``dst``).
-    dst_field: str = "Exten"
-    # AMI event that signals a dial/queue attempt created an outgoing channel.
-    # While this event is seen for a call, the call is considered connected
-    # (not missed). Asterisk emits ``DialBegin`` for both ``Dial()`` and queue
-    # member attempts.
-    dial_event: str = "DialBegin"
+    # Name of the AMI Hangup event field(s) used as the lookup key (``dst``).
+    # May be a single field or a comma-separated list tried in order until one
+    # yields a usable value. ``Exten`` is preferred but does not always carry
+    # the dialled DID (it is the special ``h`` hangup-handler extension when
+    # the call traversed one), so ``ConnectedLineNum`` is used as a fallback.
+    dst_field: str = "Exten,ConnectedLineNum"
+    # AMI event(s) that signal a dial/queue attempt created an outgoing
+    # channel. May be a single event or a comma-separated list. While any of
+    # these events is seen for a call, the call is considered connected (not
+    # missed). Asterisk emits ``DialBegin`` for ``Dial()`` but queue member
+    # attempts are reported via ``AgentCalled`` instead, so both are watched
+    # by default.
+    dial_event: str = "DialBegin,AgentCalled"
 
 
 @dataclass(frozen=True)
@@ -162,8 +168,8 @@ def load_config() -> AppConfig:
         port=_get_int("AMI_PORT", 5038),
         username=_get("AMI_USERNAME", required=True),
         secret=_get("AMI_SECRET", required=True),
-        dst_field=_get("AMI_DST_FIELD", "Exten"),
-        dial_event=_get("AMI_DIAL_EVENT", "DialBegin"),
+        dst_field=_get("AMI_DST_FIELD", "Exten,ConnectedLineNum"),
+        dial_event=_get("AMI_DIAL_EVENT", "DialBegin,AgentCalled"),
     )
 
     mysql = MySQLConfig(

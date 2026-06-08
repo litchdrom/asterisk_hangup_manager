@@ -8,12 +8,16 @@ and sends a notification email.
 
 ## How it works
 
-1. The service connects to Asterisk over AMI and subscribes to the dial event
-   (`AMI_DIAL_EVENT`, default `DialBegin`) and to `Hangup` events.
+1. The service connects to Asterisk over AMI and subscribes to the dial
+   event(s) (`AMI_DIAL_EVENT`, default `DialBegin,AgentCalled` — comma-separated
+   and watched together) and to `Hangup` events. `Dial()` emits `DialBegin`,
+   while queue member attempts are reported via `AgentCalled`.
 2. While a dial/queue attempt creates an outgoing channel for a call, that
    call is remembered as *connected*.
 3. When the call's originating channel hangs up, the service reads a lookup
-   key from a configurable event field (`AMI_DST_FIELD`, default `Exten`).
+   key from one or more configurable event fields (`AMI_DST_FIELD`, default
+   `Exten,ConnectedLineNum`, tried in order; the special `h` hangup-handler
+   extension is skipped).
 4. If **no** channel was created for that call, it is treated as a *missed
    call*: the service queries the MySQL table for a row whose `dst` matches
    the key.
@@ -84,8 +88,8 @@ When running under systemd, the provided unit loads the same file via
 | --- | --- | --- |
 | `AMI_HOST` / `AMI_PORT` | `127.0.0.1` / `5038` | AMI address |
 | `AMI_USERNAME` / `AMI_SECRET` | — (required) | AMI credentials |
-| `AMI_DST_FIELD` | `Exten` | Hangup event field used as the `dst` key |
-| `AMI_DIAL_EVENT` | `DialBegin` | Event marking that a dial/queue created a channel (call connected) |
+| `AMI_DST_FIELD` | `Exten,ConnectedLineNum` | Hangup event field(s) used as the `dst` key, comma-separated and tried in order (`h` is skipped) |
+| `AMI_DIAL_EVENT` | `DialBegin,AgentCalled` | Event(s) marking that a dial/queue created a channel (call connected), comma-separated |
 | `MYSQL_HOST` / `MYSQL_PORT` | `127.0.0.1` / `3306` | MySQL address |
 | `MYSQL_USER` / `MYSQL_PASSWORD` | — / empty | MySQL credentials (`MYSQL_USER` required) |
 | `MYSQL_DATABASE` | — (required) | Database name |

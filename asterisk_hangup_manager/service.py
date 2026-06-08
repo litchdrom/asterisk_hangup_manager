@@ -55,13 +55,30 @@ class HangupManager:
 
     @staticmethod
     def extract_dst(event: Mapping[str, Any], field: str) -> str | None:
-        """Return the lookup key from a Hangup event, or ``None``."""
+        """Return the lookup key from a Hangup event, or ``None``.
 
-        value = event.get(field)
-        if value is None:
-            return None
-        value = str(value).strip()
-        return value or None
+        ``field`` may name a single AMI field or a comma-separated list of
+        fields that are tried in order until one yields a usable value. This
+        lets the ``Exten`` field (which does not always carry the dialled DID,
+        and is reported as the special ``h`` hangup-handler extension when the
+        call traversed one) fall back to, for example, ``ConnectedLineNum``.
+
+        The special ``h`` extension is skipped because it is Asterisk's
+        hangup-handler extension rather than a real destination number.
+        """
+
+        for name in field.split(","):
+            name = name.strip()
+            if not name:
+                continue
+            value = event.get(name)
+            if value is None:
+                continue
+            value = str(value).strip()
+            if not value or value == "h":
+                continue
+            return value
+        return None
 
     @staticmethod
     def call_id(event: Mapping[str, Any]) -> str | None:
@@ -207,7 +224,10 @@ class HangupManager:
         await self._repository.connect()
         manager = self._manager or self._build_manager()
         self._manager = manager
-        manager.register_event(self._config.ami.dial_event, self._on_dial)
+        for dial_event in self._config.ami.dial_event.split(","):
+            dial_event = dial_event.strip()
+            if dial_event:
+                manager.register_event(dial_event, self._on_dial)
         manager.register_event("Hangup", self._on_hangup)
 
         try:

@@ -26,11 +26,11 @@ def test_load_config_defaults(monkeypatch):
     assert config.ami.host == "127.0.0.1"
     assert config.ami.port == 5038
     assert config.ami.username == "user"
-    assert config.ami.dst_field == "Exten"
+    assert config.ami.dst_field == "Exten,ConnectedLineNum"
     assert config.mysql.table == "hangup_contacts"
     assert config.smtp.port == 25
     assert config.smtp.use_tls is False
-    assert config.ami.dial_event == "DialBegin"
+    assert config.ami.dial_event == "DialBegin,AgentCalled"
     assert config.smtp.subject_template == "Missed call to {dst}"
     assert config.smtp.fallback_email == ""
     assert config.smtp.body_template == ""

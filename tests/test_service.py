@@ -124,6 +124,38 @@ def test_extract_dst_strips_whitespace():
     assert HangupManager.extract_dst({}, "Exten") is None
 
 
+def test_extract_dst_falls_back_to_next_field():
+    fields = "Exten,ConnectedLineNum"
+    # `Exten` is the hangup-handler extension; fall back to ConnectedLineNum.
+    event = {"Exten": "h", "ConnectedLineNum": "2001"}
+    assert HangupManager.extract_dst(event, fields) == "2001"
+    # Empty/missing leading field also falls through.
+    assert HangupManager.extract_dst({"ConnectedLineNum": "2001"}, fields) == "2001"
+    # `Exten` is preferred when it holds a real value.
+    assert (
+        HangupManager.extract_dst(
+            {"Exten": "1001", "ConnectedLineNum": "2001"}, fields
+        )
+        == "1001"
+    )
+    # No usable field yields None.
+    assert HangupManager.extract_dst({"Exten": "h"}, fields) is None
+
+
+def test_handle_hangup_uses_connected_line_num_when_exten_is_h():
+    contacts = {"2001": HangupContact("2001", "did@example.com", "DID")}
+    mailer = FakeMailer()
+    manager = _manager(contacts, mailer, dst_field="Exten,ConnectedLineNum")
+
+    result = asyncio.run(
+        manager.handle_hangup({"Exten": "h", "ConnectedLineNum": "2001"})
+    )
+
+    assert result is True
+    assert mailer.sent[0][0] == "did@example.com"
+
+
+
 def test_contact_without_email_uses_fallback():
     contacts = {"5555555": HangupContact("5555555", "", "No mailbox")}
     mailer = FakeMailer()
@@ -205,3 +237,49 @@ def test_body_template_is_used_when_set():
 
     assert result is True
     assert mailer.sent[0][2] == "Missed 1001 (Front desk)"
+
+
+class FakeManager:
+    def __init__(self):
+        self.registered = []
+        self.connected = False
+        self.closed = False
+
+    def register_event(self, name, callback):
+        self.registered.append(name)
+
+    async def connect(self):
+        self.connected = True
+
+    def close(self):
+        self.closed = True
+
+
+def test_run_registers_each_configured_dial_event(monkeypatch):
+    fake = FakeManager()
+    config = _config()
+    config = AppConfig(
+        ami=AMIConfig(
+            username="u",
+            secret="s",
+            dial_event="DialBegin,AgentCalled",
+        ),
+        mysql=config.mysql,
+        smtp=config.smtp,
+    )
+    manager = HangupManager(config, FakeRepository({}), FakeMailer(), fake)
+
+    async def _run_and_cancel():
+        task = asyncio.ensure_future(manager.run())
+        # Let run() register events and reach the blocking wait.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(_run_and_cancel())
+
+    assert fake.registered == ["DialBegin", "AgentCalled", "Hangup"]
