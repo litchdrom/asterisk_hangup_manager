@@ -64,14 +64,18 @@ The table and column names are configurable if your schema differs.
 ## Configuration
 
 All settings come from environment variables so that passwords never live in
-the repository. Copy [`config.example.env`](config.example.env) to `.env`,
-edit it, then load it before running:
+the repository. Copy [`config.example.env`](config.example.env) to `.env` and
+edit it. The service loads `.env` automatically from the working directory (or
+from the path in `ENV_FILE`), so you no longer need to source it into your
+shell:
 
 ```bash
 cp config.example.env .env
-# edit .env
-set -a && source .env && set +a
+# edit .env, then just run the service
 ```
+
+Real environment variables always take precedence over values in `.env`, so a
+systemd `EnvironmentFile=` or shell export can override individual settings.
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -92,6 +96,7 @@ set -a && source .env && set +a
 | `SMTP_BODY_TEMPLATE` | — (built-in body) | Optional body; supports `{dst}`, `{description}`, `{channel}`, `{caller_id}`, `{cause}` |
 | `SMTP_FALLBACK_EMAIL` | empty | Recipient used when the matched contact row has no email |
 | `LOG_LEVEL` | `INFO` | Logging level |
+| `ENV_FILE` | `.env` | Path to the env file loaded at startup |
 
 ## Running
 
@@ -99,6 +104,20 @@ set -a && source .env && set +a
 python -m asterisk_hangup_manager
 # or, after `pip install .`:
 asterisk-hangup-manager
+```
+
+## Running as a systemd service
+
+A ready-to-edit unit file is provided in
+[`systemd/asterisk-hangup-manager.service`](systemd/asterisk-hangup-manager.service).
+It uses `EnvironmentFile=` to load `.env` directly — no `set -a`/`source`
+needed:
+
+```bash
+sudo cp systemd/asterisk-hangup-manager.service /etc/systemd/system/
+# edit User, WorkingDirectory and EnvironmentFile paths to match your install
+sudo systemctl daemon-reload
+sudo systemctl enable --now asterisk-hangup-manager
 ```
 
 ## Testing

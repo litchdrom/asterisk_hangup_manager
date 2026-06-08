@@ -1,6 +1,6 @@
 import pytest
 
-from asterisk_hangup_manager.config import ConfigError, load_config
+from asterisk_hangup_manager.config import ConfigError, load_config, load_env_file
 
 
 REQUIRED = {
@@ -63,3 +63,74 @@ def test_load_config_invalid_int(monkeypatch):
 
     with pytest.raises(ConfigError):
         load_config()
+
+
+def test_load_env_file_sets_missing_keys(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "# a comment",
+                "",
+                "AMI_USERNAME=fromfile",
+                'AMI_SECRET="quoted secret"',
+                "export MYSQL_USER=exported",
+                "MYSQL_DATABASE=asterisk",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    for key in ("AMI_USERNAME", "AMI_SECRET", "MYSQL_USER", "MYSQL_DATABASE"):
+        monkeypatch.delenv(key, raising=False)
+
+    load_env_file(str(env_file))
+
+    import os
+
+    assert os.environ["AMI_USERNAME"] == "fromfile"
+    assert os.environ["AMI_SECRET"] == "quoted secret"
+    assert os.environ["MYSQL_USER"] == "exported"
+    assert os.environ["MYSQL_DATABASE"] == "asterisk"
+
+
+def test_load_env_file_does_not_override_existing(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("AMI_USERNAME=fromfile\n", encoding="utf-8")
+    monkeypatch.setenv("AMI_USERNAME", "fromenv")
+
+    load_env_file(str(env_file))
+
+    import os
+
+    assert os.environ["AMI_USERNAME"] == "fromenv"
+
+
+def test_load_env_file_missing_is_ignored(tmp_path):
+    # Should not raise when the file does not exist.
+    load_env_file(str(tmp_path / "does-not-exist.env"))
+
+
+def test_load_config_reads_env_file(monkeypatch, tmp_path):
+    for key in list(REQUIRED):
+        monkeypatch.delenv(key, raising=False)
+    env_file = tmp_path / "custom.env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "AMI_USERNAME=user",
+                "AMI_SECRET=secret",
+                "MYSQL_USER=dbuser",
+                "MYSQL_DATABASE=asterisk",
+                "AMI_PORT=5060",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ENV_FILE", str(env_file))
+
+    config = load_config()
+
+    assert config.ami.username == "user"
+    assert config.ami.port == 5060

@@ -1,0 +1,20 @@
+[Unit]
+Description=Asterisk Hangup Manager (missed-call email notifier)
+After=network-online.target mariadb.service mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust user/group and paths to your deployment.
+User=asterisk
+Group=asterisk
+WorkingDirectory=/opt/asterisk_hangup_manager
+# Load configuration from a .env file. systemd reads KEY=VALUE pairs directly,
+# so no "set -a && source .env" is needed.
+EnvironmentFile=/opt/asterisk_hangup_manager/.env
+ExecStart=/opt/asterisk_hangup_manager/.venv/bin/python -m asterisk_hangup_manager
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
