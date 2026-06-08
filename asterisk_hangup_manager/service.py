@@ -121,6 +121,24 @@ class HangupManager:
         if call_id is not None:
             self._connected_calls.add(call_id)
 
+    @staticmethod
+    def _template_fields(
+        contact: HangupContact, event: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Collect the placeholders shared by the subject and body templates."""
+
+        return {
+            "dst": contact.dst,
+            "description": contact.description,
+            "channel": event.get("Channel", "unknown"),
+            "caller_id": (
+                event.get("CallerIDNum") or event.get("Source") or "unknown"
+            ),
+            "cause": event.get("Cause-txt") or event.get("Cause", "unknown"),
+            "start_time": event.get("StartTime", "unknown"),
+            "duration": event.get("Duration", "unknown"),
+        }
+
     def build_email_body(
         self, contact: HangupContact, event: Mapping[str, Any]
     ) -> str:
@@ -131,33 +149,19 @@ class HangupManager:
         contact and call details.
         """
 
-        channel = event.get("Channel", "unknown")
-        caller_id = (
-            event.get("CallerIDNum") or event.get("Source") or "unknown"
-        )
-        cause = event.get("Cause-txt") or event.get("Cause", "unknown")
-        start_time = event.get("StartTime", "unknown")
-        duration = event.get("Duration", "unknown")
+        fields = self._template_fields(contact, event)
         if self._config.smtp.body_template:
-            return self._config.smtp.body_template.format(
-                dst=contact.dst,
-                description=contact.description,
-                channel=channel,
-                caller_id=caller_id,
-                cause=cause,
-                start_time=start_time,
-                duration=duration,
-            )
-        lines = [f"A missed call was detected for {contact.dst}.", ""]
+            return self._config.smtp.body_template.format(**fields)
+        lines = [f"A missed call was detected for {fields['dst']}.", ""]
         if contact.description:
-            lines.append(f"Description: {contact.description}")
+            lines.append(f"Description: {fields['description']}")
         lines.extend(
             [
-                f"Channel: {channel}",
-                f"Caller ID: {caller_id}",
-                f"Hangup cause: {cause}",
-                f"Start time: {start_time}",
-                f"Duration: {duration}",
+                f"Channel: {fields['channel']}",
+                f"Caller ID: {fields['caller_id']}",
+                f"Hangup cause: {fields['cause']}",
+                f"Start time: {fields['start_time']}",
+                f"Duration: {fields['duration']}",
             ]
         )
         return "\n".join(lines)
@@ -221,7 +225,7 @@ class HangupManager:
             return False
 
         subject = self._config.smtp.subject_template.format(
-            dst=contact.dst, description=contact.description
+            **self._template_fields(contact, event)
         )
         body = self.build_email_body(contact, event)
 
