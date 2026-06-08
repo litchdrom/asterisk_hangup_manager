@@ -94,12 +94,24 @@ def test_load_env_file_sets_missing_keys(monkeypatch, tmp_path):
     assert os.environ["MYSQL_DATABASE"] == "asterisk"
 
 
-def test_load_env_file_does_not_override_existing(monkeypatch, tmp_path):
+def test_load_env_file_overrides_existing_by_default(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("AMI_USERNAME=fromfile\n", encoding="utf-8")
     monkeypatch.setenv("AMI_USERNAME", "fromenv")
 
     load_env_file(str(env_file))
+
+    import os
+
+    assert os.environ["AMI_USERNAME"] == "fromfile"
+
+
+def test_load_env_file_can_preserve_existing(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("AMI_USERNAME=fromfile\n", encoding="utf-8")
+    monkeypatch.setenv("AMI_USERNAME", "fromenv")
+
+    load_env_file(str(env_file), override=False)
 
     import os
 

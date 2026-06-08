@@ -74,8 +74,11 @@ cp config.example.env .env
 # edit .env, then just run the service
 ```
 
-Real environment variables always take precedence over values in `.env`, so a
-systemd `EnvironmentFile=` or shell export can override individual settings.
+Values in `.env` override variables already present in the environment, so
+editing `.env` always takes effect — even if a stale value was left exported
+in your shell (for example from an earlier `set -a; source config.example.env`).
+When running under systemd, the provided unit loads the same file via
+`EnvironmentFile=`, so the two stay in sync.
 
 | Variable | Default | Description |
 | --- | --- | --- |
