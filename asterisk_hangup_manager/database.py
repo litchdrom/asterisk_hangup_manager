@@ -24,7 +24,11 @@ def _safe_identifier(name: str) -> str:
 
 @dataclass(frozen=True)
 class HangupContact:
-    """A contact to notify when a hangup is detected."""
+    """A contact to notify when a missed call is detected.
+
+    ``email`` may be empty when the row exists but has no address; in that
+    case the caller is expected to fall back to a predefined recipient.
+    """
 
     dst: str
     email: str
@@ -88,7 +92,7 @@ class HangupContactRepository:
             return None
         return HangupContact(
             dst=str(row["dst"]),
-            email=row["email"],
+            email=row["email"] or "",
             description=row["description"] or "",
         )
 
