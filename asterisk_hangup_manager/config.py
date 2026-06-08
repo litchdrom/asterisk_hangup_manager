@@ -15,6 +15,45 @@ class ConfigError(ValueError):
     """Raised when the configuration is missing or invalid."""
 
 
+def load_env_file(path: str | None = None) -> None:
+    """Populate ``os.environ`` from a ``.env`` file if one is present.
+
+    Lines are ``KEY=VALUE`` pairs; blank lines and ``#`` comments are
+    ignored, an optional leading ``export`` is allowed and surrounding
+    single or double quotes are stripped. Variables already present in the
+    environment are **not** overwritten, so values provided by the shell or
+    by systemd's ``EnvironmentFile=`` always take precedence. A missing file
+    is silently ignored.
+
+    The path defaults to ``$ENV_FILE`` when set, otherwise ``.env`` in the
+    current working directory.
+    """
+
+    env_path = path or os.environ.get("ENV_FILE") or ".env"
+    try:
+        with open(env_path, "r", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except FileNotFoundError:
+        return
+
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
 def _get(name: str, default: str | None = None, *, required: bool = False) -> str:
     value = os.environ.get(name, default)
     if required and (value is None or value == ""):
@@ -103,7 +142,13 @@ class AppConfig:
 
 
 def load_config() -> AppConfig:
-    """Build an :class:`AppConfig` from the current environment."""
+    """Build an :class:`AppConfig` from the current environment.
+
+    A ``.env`` file (see :func:`load_env_file`) is loaded first when present,
+    so the service can run without sourcing it into the shell beforehand.
+    """
+
+    load_env_file()
 
     ami = AMIConfig(
         host=_get("AMI_HOST", "127.0.0.1"),
