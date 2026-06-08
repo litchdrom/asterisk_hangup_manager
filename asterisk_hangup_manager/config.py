@@ -188,6 +188,10 @@ class SMTPConfig:
     use_tls: bool = False
     start_tls: bool = False
     sender: str = "asterisk@localhost"
+    # Subject line for the missed-call notification. Supports the same
+    # placeholders as ``body_template``: ``{dst}``, ``{description}``,
+    # ``{channel}``, ``{caller_id}``, ``{cause}``, ``{start_time}`` and
+    # ``{duration}``.
     subject_template: str = "Missed call to {dst}"
     # Predefined body for the missed-call notification. When empty a built-in
     # body is composed from the contact and call details. Supports the

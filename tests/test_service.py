@@ -65,13 +65,14 @@ def _config(
     fallback_email="",
     body_template="",
     ami=None,
+    subject_template="Hangup on {dst}",
 ):
     return AppConfig(
         ami=ami or AMIConfig(username="u", secret="s", dst_field=dst_field),
         mysql=MySQLConfig(user="u", database="d"),
         cdr=CdrConfig(user="u", database="d"),
         smtp=SMTPConfig(
-            subject_template="Hangup on {dst}",
+            subject_template=subject_template,
             fallback_email=fallback_email,
             body_template=body_template,
         ),
@@ -86,9 +87,16 @@ def _manager(
     body_template="",
     ami=None,
     cdr_repository=None,
+    subject_template="Hangup on {dst}",
 ):
     return HangupManager(
-        _config(dst_field, fallback_email, body_template, ami=ami),
+        _config(
+            dst_field,
+            fallback_email,
+            body_template,
+            ami=ami,
+            subject_template=subject_template,
+        ),
         FakeRepository(contacts),
         mailer,
         cdr_repository=cdr_repository,
@@ -273,6 +281,23 @@ def test_body_template_is_used_when_set():
 
     assert result is True
     assert mailer.sent[0][2] == "Missed 1001 (Front desk)"
+
+
+def test_subject_template_supports_call_placeholders():
+    contacts = {"1001": HangupContact("1001", "a@b.c", "Front desk")}
+    mailer = FakeMailer()
+    manager = _manager(
+        contacts,
+        mailer,
+        subject_template="Missed call from {caller_id} to {dst}",
+    )
+
+    result = asyncio.run(
+        manager.handle_hangup({"Exten": "1001", "CallerIDNum": "2002"})
+    )
+
+    assert result is True
+    assert mailer.sent[0][1] == "Missed call from 2002 to 1001"
 
 
 class FakeManager:

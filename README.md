@@ -135,7 +135,7 @@ When running under systemd, the provided unit loads the same file via
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | empty | SMTP auth (optional) |
 | `SMTP_USE_TLS` / `SMTP_START_TLS` | `false` | TLS / STARTTLS |
 | `SMTP_SENDER` | `asterisk@localhost` | From address |
-| `SMTP_SUBJECT_TEMPLATE` | `Missed call to {dst}` | Supports `{dst}` and `{description}` |
+| `SMTP_SUBJECT_TEMPLATE` | `Missed call to {dst}` | Supports `{dst}`, `{description}`, `{channel}`, `{caller_id}`, `{cause}`, `{start_time}`, `{duration}` |
 | `SMTP_BODY_TEMPLATE` | — (built-in body) | Optional body; supports `{dst}`, `{description}`, `{channel}`, `{caller_id}`, `{cause}`, `{start_time}`, `{duration}` |
 | `SMTP_FALLBACK_EMAIL` | empty | Recipient used when the matched contact row has no email |
 | `LOG_LEVEL` | `INFO` | Logging level |
